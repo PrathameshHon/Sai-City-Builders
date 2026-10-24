@@ -1,0 +1,199 @@
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../src/generated/prisma"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  name           String
+  tagline        String?
+  location       String
+  type           String // Plots | Villas | Apartments | Commercial
+  status         String // Ongoing | Completed | Upcoming
+  price          String // display string e.g. "₹14.5 Lacs onwards"
+  landArea       String?
+  totalUnits     String?
+  unitSizes      String?
+  reraNumber     String?
+  possessionDate String?
+  description    String
+  highlights     String // JSON string array of key highlights
+  amenities      String? // JSON string array
+  image          String
+  gallery        String? // JSON string array of image paths
+  featured       Boolean  @default(false)
+  sortOrder      Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  flats          Flat[]
+}
+
+// Interactive booking inventory — one row per bookable unit
+model Flat {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  tower       String // Tower A / Sector A / Row A / Block P
+  floor       Int // 0 = ground
+  floorLabel  String // "G" | "1" | "2" ...
+  unitNumber  String // A-101
+  unitType    String // 1 BHK / 2 BHK / Plot / Villa / Shop / Office
+  areaSqft    Int
+  priceLakhs  Float
+  facing      String?
+  status      String    @default("AVAILABLE") // AVAILABLE | LOCKED | SOLD
+  lockedUntil DateTime? // temp-lock expiry (server-side TTL)
+  lockSession String? // session id that holds the lock
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  bookings    Booking[]
+  orders      BookingOrder[]
+
+  @@unique([projectId, unitNumber])
+  @@index([projectId, tower, floor])
+}
+
+// Completed purchases
+model Booking {
+  id          String   @id @default(cuid())
+  flatId      String
+  flat        Flat     @relation(fields: [flatId], references: [id], onDelete: Cascade)
+  buyerName   String
+  buyerPhone  String
+  buyerEmail  String?
+  amountLabel String? // display amount at time of booking
+  status      String   @default("confirmed") // confirmed | cancelled
+  createdAt   DateTime @default(now())
+}
+
+model Enquiry {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String
+  email      String?
+  project    String? // project interest
+  budget     String?
+  message    String?
+  source     String   @default("website")
+  status     String   @default("new") // new | contacted | qualified | confirmed
+  createdAt  DateTime @default(now())
+}
+
+model Subscriber {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  createdAt DateTime @default(now())
+}
+
+model Testimonial {
+  id         String   @id @default(cuid())
+  name       String
+  role       String // Home Owner | Investor | Business Owner
+  rating     Int      @default(5)
+  comment    String
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now())
+}
+
+/* ── Advance-payment booking orders (Razorpay / demo gateway) ─────── */
+model BookingOrder {
+  id                String   @id @default(cuid())
+  flatId            String
+  flat              Flat     @relation(fields: [flatId], references: [id], onDelete: Cascade)
+  orderNumber       String   @unique // SGW-XXXXXX shown to buyer
+  amount            Int // advance amount in whole rupees
+  currency          String   @default("INR")
+  provider          String   @default("demo") // razorpay | demo
+  razorpayOrderId   String?
+  razorpayPaymentId String?
+  razorpaySignature String?
+  buyerName         String
+  buyerPhone        String
+  buyerEmail        String?
+  status            String   @default("CREATED") // CREATED | PAID | FAILED
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([flatId, status])
+}
+
+/* ── Visitor-submitted reviews (moderated before showing on site) ─── */
+model Review {
+  id          String   @id @default(cuid())
+  name        String
+  email       String?
+  phone       String?
+  rating      Int      @default(5) // 1..5
+  title       String?
+  comment     String
+  projectName String?
+  flatNo      String?
+  albumId     String? // linked transformation album (if photos attached)
+  album       Album?   @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  approved    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([approved, createdAt])
+}
+
+/* ── Visitor photo albums: flat transformations, grouped project → flat ── */
+model Album {
+  id          String       @id @default(cuid())
+  title       String
+  description String?
+  projectName String
+  flatNo      String
+  ownerName   String
+  approved    Boolean      @default(false)
+  coverPhoto  String?
+  photos      AlbumPhoto[]
+  reviews     Review[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([approved, projectName])
+}
+
+model AlbumPhoto {
+  id        String   @id @default(cuid())
+  albumId   String
+  album     Album    @relation(fields: [albumId], references: [id], onDelete: Cascade)
+  url       String
+  caption   String?
+  createdAt DateTime @default(now())
+}
+
+/* ── Admin-managed gallery items (replaces hardcoded list over time) ── */
+model GalleryItem {
+  id        String   @id @default(cuid())
+  title     String
+  category  String   @default("Site") // Site | Amenities | Interiors | Construction | Community
+  caption   String?
+  image     String
+  sortOrder Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
+/* ── Key/value site settings (Razorpay keys, advance amount, admin password) ── */
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
+/* ── Uploaded images, stored as base64 so they work on serverless (Vercel) ── */
+model Upload {
+  id        String   @id @default(cuid())
+  mime      String // image/jpeg | image/png | image/webp
+  size      Int // byte length of the decoded payload
+  data      String // base64-encoded image bytes
+  createdAt DateTime @default(now())
+}
