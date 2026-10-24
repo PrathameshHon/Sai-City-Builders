@@ -24,8 +24,8 @@ export const SETTING_KEYS = {
 
 const DEFAULTS: Record<string, string> = {
   [SETTING_KEYS.advanceAmount]: "500",
-  [SETTING_KEYS.adminEmail]: "admin@saicitybuilders.in",
-  [SETTING_KEYS.adminPassword]: "sai-admin",
+  [SETTING_KEYS.adminEmail]: "adminid",
+  [SETTING_KEYS.adminPassword]: "password",
   [SETTING_KEYS.razorpayKeyId]: "",
   [SETTING_KEYS.razorpayKeySecret]: "",
 };
